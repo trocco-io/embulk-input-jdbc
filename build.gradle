@@ -7,6 +7,7 @@ plugins {
     id "signing"
     id 'checkstyle'
     id "org.embulk.embulk-plugins" version "0.5.5" apply false
+    id "com.palantir.git-version" version "3.0.0"
 }
 
 allprojects {
@@ -15,12 +16,17 @@ allprojects {
     description = "Selects records from a table."
 }
 
+ext {
+    troccoVersion = "0.0.1"
+}
+
 subprojects {
     apply plugin: 'java'
     apply plugin: "maven-publish"
     apply plugin: "signing"
     apply plugin: "checkstyle"
     apply plugin: "org.embulk.embulk-plugins"
+    apply plugin: 'com.palantir.git-version'
 
     repositories {
         mavenCentral()
@@ -132,6 +138,7 @@ subprojects {
         summary = "JDBC input plugin for Embulk"
         homepage = "https://github.com/embulk/embulk-input-jdbc"
         licenses = [ "Apache-2.0" ]
+        archiveVersion = "${project.version}.trocco.${project.troccoVersion}"
 
         into("default_jdbc_driver") {
             from configurations.defaultJdbcDriver
