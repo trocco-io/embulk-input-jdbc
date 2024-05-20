@@ -83,6 +83,14 @@ public class SQLServerInputPlugin
         @ConfigDefault("\"embulk-input-sqlserver\"")
         @Size(max = 128)
         public String getApplicationName();
+
+        @Config("product")
+        @ConfigDefault("\"sql_server\"")
+        public Product getProduct();
+
+        @Config("host_name_in_certificate")
+        @ConfigDefault("null")
+        public Optional<String> getHostNameInCertificate();
     }
 
     @Override
@@ -282,6 +290,19 @@ public class SQLServerInputPlugin
                 if (!sqlServerTask.getUser().isPresent()) {
                     throw new ConfigException("'user' option is required but not set.");
                 }
+            }
+
+            // https://learn.microsoft.com/en-us/azure/synapse-analytics/sql-data-warehouse/sql-data-warehouse-connect-overview#jdbc-connection-string-example
+            // jdbc:sqlserver://yourserver.database.windows.net:1433;database=yourdatabase;user={your_user_name};password={your_password_here};encrypt=true;trustServerCertificate=false;hostNameInCertificate=*.database.windows.net;loginTimeout=30;
+            // https://learn.microsoft.com/en-us/azure/synapse-analytics/sql/connect-overview#jdbc-connection-string-example
+            // jdbc:sqlserver://yourserver.sql.azuresynapse.net:1433;database=yourdatabase;user={your_user_name};password={your_password_here};encrypt=true;trustServerCertificate=false;hostNameInCertificate=*.sql.azuresynapse.net;loginTimeout=30;
+            // https://learn.microsoft.com/en-us/sql/connect/jdbc/setting-the-connection-properties?view=azure-sqldw-latest#properties
+            if (sqlServerTask.getProduct() == Product.AZURE_SYNAPSE_ANALYTICS) {
+                props.setProperty("encrypt", "true");
+                props.setProperty("trustServerCertificate", "false");
+                String host = sqlServerTask.getHost().get();
+                String hostNameInCertificate = sqlServerTask.getHostNameInCertificate().orElse(host.replaceFirst("^[^.]+\\.(.*)$", "*.$1"));
+                props.setProperty("hostNameInCertificate", hostNameInCertificate);
             }
         }
 
