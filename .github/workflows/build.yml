@@ -1,0 +1,20 @@
+name: Build and test
+on: push
+jobs:
+  postgresql:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+    - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+      with:
+        java-version: 8
+        distribution: 'zulu'
+    - name: Build with testing
+      run: ./gradlew --stacktrace :embulk-input-postgresql:check
+      env:
+        _JAVA_OPTIONS: "-Xmx2048m -Xms512m"
+    - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      if: always()
+      with:
+        name: postgresql
+        path: embulk-input-postgresql/build/reports/tests/test
