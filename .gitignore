@@ -9,3 +9,6 @@ build/
 ci/postgresql.yml
 
 embulk-input-oracle/driver/
+/vendor/
+.gemspec.generated
+default_jdbc_driver/
