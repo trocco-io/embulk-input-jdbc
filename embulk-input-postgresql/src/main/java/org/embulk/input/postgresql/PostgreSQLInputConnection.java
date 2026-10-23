@@ -22,6 +22,15 @@ public class PostgreSQLInputConnection
         super(connection, schemaName);
     }
 
+    // Widened to public so PostgreSQLInputPlugin's copy of
+    // AbstractJdbcInputPlugin#run() (needed to wire sourceTimeZone through
+    // newColumnGetterFactory independently of defaultTimeZone) can call it.
+    @Override
+    public void executeUpdate(String sql) throws SQLException
+    {
+        super.executeUpdate(sql);
+    }
+
     @Override
     protected BatchSelect newBatchSelect(PreparedQuery preparedQuery,
             List<ColumnGetter> getters,

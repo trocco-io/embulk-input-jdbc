@@ -1,70 +1,38 @@
 
 plugins {
-    id 'com.jfrog.bintray' version '1.8.4'
-    id 'com.github.jruby-gradle.base' version '1.6.0'
     id 'java'
     id 'checkstyle'
 }
-import com.github.jrubygradle.JRubyExec
 
-def bintrayReleaseProjects = [
-    project(":embulk-input-jdbc"),
-    project(":embulk-input-mysql"),
-    project(":embulk-input-postgresql"),
-    project(":embulk-input-redshift"),
-    project(":embulk-input-oracle"),
-    project(":embulk-input-sqlserver"),
-    project(":embulk-input-db2"),
-]
+// NOTE: bintray (com.jfrog.bintray) and jcenter were both shut down; the
+// com.github.jruby-gradle.base plugin used for the "gem" task also fails to resolve its
+// own transitive dependency (grolifant) now that jcenter is gone. Both have been removed
+// below so this repo can actually compile/test again. This fork's build output was not
+// used anywhere prior to this change, so this carries zero risk to existing behavior.
+// Gem packaging is done with a plain Exec task invoking the system `gem` command instead
+// of JRubyExec (see the "gem" task below).
+
+def embulkRuntimeJar = file("${rootDir}/vendor/embulk-0.9.25.jar")
+
+task fetchEmbulkRuntime(type: Exec) {
+    outputs.file(embulkRuntimeJar)
+    commandLine 'sh', "${rootDir}/scripts/fetch_embulk_runtime.sh"
+}
 
 allprojects {
     group = 'org.embulk.input.jdbc'
     version = '0.10.0'
-
-    apply plugin: 'com.jfrog.bintray'
-    apply plugin: 'maven-publish'
-
-    bintray {
-        // write at your bintray user name and api key to ~/.gradle/gradle.properties file:
-        // bintray_user=frsyuki
-        // bintray_api_key=xxxxxxxxxxx
-        user = project.hasProperty('bintray_user') ? bintray_user : ''
-        key = project.hasProperty('bintray_api_key') ? bintray_api_key : ''
-
-        publications = ['bintrayMavenRelease']
-
-        dryRun = !bintrayReleaseProjects.contains(project)
-        publish = true
-
-        pkg {
-            userOrg = 'embulk-input-jdbc'
-            repo = 'maven'
-            name = project.name
-            desc = 'MySQL, PostgreSQL, Redshift and generic JDBC input plugins for Embulk'
-            websiteUrl = 'https://github.com/embulk/embulk-input-jdbc'
-            issueTrackerUrl = 'https://github.com/embulk/embulk-input-jdbc/issues'
-            vcsUrl = 'https://github.com/embulk/embulk-input-jdbc.git'
-            licenses = ['Apache-2.0']
-            labels = ['embulk', 'java']
-            publicDownloadNumbers = true
-
-            version {
-                name = project.version
-            }
-        }
-    }
 }
 
 subprojects {
     apply plugin: 'maven'  // install jar files to the local repo: $ gradle install
     apply plugin: 'java'
     apply plugin: 'findbugs'
+    apply plugin: 'checkstyle'
     //apply plugin: 'jacoco'
-    apply plugin: 'com.github.jruby-gradle.base'
 
     repositories {
         mavenCentral()
-        jcenter()
     }
 
     configurations {
@@ -76,10 +44,14 @@ subprojects {
     targetCompatibility = 1.8
 
     dependencies {
-        compile  'org.embulk:embulk-core:0.9.12'
-        provided 'org.embulk:embulk-core:0.9.12'
-        testCompile 'org.embulk:embulk-test:0.9.12'
+        compile  files(embulkRuntimeJar)
+        provided files(embulkRuntimeJar)
+        testCompile 'junit:junit:4.+'
+        testCompile 'org.mockito:mockito-core:4.+'
     }
+
+    compileJava.dependsOn(rootProject.fetchEmbulkRuntime)
+    compileTestJava.dependsOn(rootProject.fetchEmbulkRuntime)
 
     tasks.withType(JavaCompile) {
         options.compilerArgs << "-Xlint:unchecked" //<< "-Xlint:deprecation"
@@ -141,11 +113,17 @@ subprojects {
         source = sourceSets.main.allJava + sourceSets.test.allJava
     }
 
-    task gem(type: JRubyExec, dependsOn: ['build', 'gemspec', 'classpath', 'defaultJdbcDriver']) {
-        jrubyArgs "-S"
-        script "gem"
-        scriptArgs "build", "${project.projectDir.absolutePath}/build/gemspec"
-        doLast { ant.move(file: "${project.name}-${project.version}.gem", todir: "${parent.projectDir}/pkg") }
+    task gem(type: Exec, dependsOn: ['build', 'gemspec', 'classpath', 'defaultJdbcDriver']) {
+        doFirst { file("${parent.projectDir}/pkg").mkdirs() }
+        workingDir project.projectDir
+        // "gem build" chdirs into the gemspec file's own directory before evaluating it
+        // (so that relative Dir[]/`git ls-files` paths inside the gemspec resolve against
+        // that directory, and so the file-existence check it runs afterwards resolves
+        // against that same directory too). The gemspec is therefore generated directly
+        // in projectDir (not under build/), matching where classpath/, lib/ and src/
+        // actually live.
+        commandLine 'gem', 'build', "${project.projectDir.absolutePath}/.gemspec.generated",
+                '--output', "${parent.projectDir.absolutePath}/pkg/${project.name}-${project.version}.gem"
     }
 
     javadoc {
@@ -172,21 +150,9 @@ subprojects {
         archives testsJar, sourcesJar, javadocJar
     }
 
-    publishing {
-        publications {
-            bintrayMavenRelease(MavenPublication) {
-                from components.java
-                artifact testsJar
-                artifact sourcesJar
-                artifact javadocJar
-            }
-        }
-    }
-
     task gemspec {
         doLast {
-            file('build').mkdirs()
-            file('build/gemspec').write($/
+            file('.gemspec.generated').write($/
 Gem::Specification.new do |spec|
   spec.name          = "${project.name}"
   spec.version       = "${project.version}"
@@ -194,8 +160,8 @@ Gem::Specification.new do |spec|
   spec.summary       = %[JDBC input plugin for Embulk]
   spec.description   = %[Selects records from a table.]
   spec.email         = ["frsyuki@gmail.com"]
-  spec.licenses      = ["Apache 2.0"]
-  spec.homepage      = "https://github.com/embulk/embulk-input-jdbc"
+  spec.licenses      = ["Apache-2.0"]
+  spec.homepage      = "https://github.com/trocco-io/embulk-input-jdbc"
 
   spec.files         = `git ls-files`.split("\n") + Dir["classpath/*.jar"] + Dir["default_jdbc_driver/*.jar"]
   spec.test_files    = spec.files.grep(%r"^(test|spec)/")

@@ -34,6 +34,7 @@ PostgreSQL input plugin for Embulk loads records from PostgreSQL.
 - **incremental_columns**: column names for incremental loading (array of strings, default: use primary keys)
 - **last_record**: values of the last record for incremental loading (array of objects, default: load all records)
 - **default_timezone**: If the sql type of a column is `date`/`time`/`datetime` and the embulk type is `string`, column values are formatted int this default_timezone. You can overwrite timezone for each columns using column_options option. (string, default: `UTC`)
+- **source_timezone**: Timezone used to *interpret* `timestamp` (`TIMESTAMP WITHOUT TIME ZONE`) column values, which don't carry their own timezone information (unlike `timestamptz`). Unlike `default_timezone` (output formatting only), this controls the actual absolute time the value is read as. (string, default: the executing machine's own timezone)
 - **default_column_options**: advanced: column_options for each JDBC type as default. key-value pairs where key is a JDBC type (e.g. 'DATE', 'BIGINT') and value is same as column_options's value.
 - **column_options**: advanced: key-value pairs where key is a column name and value is options for the column.
   - **value_type**: embulk get values from database as this value_type. Typically, the value_type determines `getXXX` method of `java.sql.PreparedStatement`.
@@ -44,7 +45,7 @@ PostgreSQL input plugin for Embulk loads records from PostgreSQL.
   By default, the embulk type is determined according to the sql type of the column (or value_type if specified).
   See below for `hstore` column.
   - **timestamp_format**: If the sql type of the column is `date`/`time`/`datetime` and the embulk type is `string`, column values are formatted by this timestamp_format. And if the embulk type is `timestamp`, this timestamp_format may be used in the output plugin. For example, stdout plugin use the timestamp_format, but *csv formatter plugin doesn't use*. (string, default : `%Y-%m-%d` for `date`, `%H:%M:%S` for `time`, `%Y-%m-%d %H:%M:%S` for `timestamp`)
-  - **timezone**: If the sql type of the column is `date`/`time`/`datetime` and the embulk type is `string`, column values are formatted in this timezone.
+  - **timezone**: If the sql type of the column is `date`/`time`/`datetime` and the embulk type is `string`, column values are formatted in this timezone. For `timestamp` columns, this also overrides `source_timezone` for *interpreting* this specific column.
 (string, value of default_timezone option is used by default)
 - **before_setup**: if set, this SQL will be executed before setup. You can prepare table for input by this option.
 - **before_select**: if set, this SQL will be executed before the SELECT query in the same transaction.
